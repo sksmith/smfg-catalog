@@ -19,5 +19,5 @@ func NewMockQueue() *MockQueue {
 }
 
 func (m *MockQueue) PublishProduct(ctx context.Context, product catalog.Product) error {
-	return m.PublishProduct(ctx, product)
+	return m.PublishProductFunc(ctx, product)
 }
