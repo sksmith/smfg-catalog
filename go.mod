@@ -1,4 +1,4 @@
-module github.com/sksmith/go-micro-example
+module github.com/sksmith/smfg-catalog
 
 go 1.15
 

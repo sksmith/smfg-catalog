@@ -12,25 +12,21 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
-	"github.com/go-chi/docgen"
 	"github.com/go-chi/render"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/sksmith/bunnyq"
-	"github.com/sksmith/go-micro-example/api"
-	"github.com/sksmith/go-micro-example/core/inventory"
-	"github.com/sksmith/go-micro-example/core/user"
-	"github.com/sksmith/go-micro-example/db"
-	"github.com/sksmith/go-micro-example/db/invrepo"
-	"github.com/sksmith/go-micro-example/db/usrrepo"
-	"github.com/sksmith/go-micro-example/queue"
+	"github.com/sksmith/smfg-catalog/api"
+	"github.com/sksmith/smfg-catalog/core/catalog"
+	"github.com/sksmith/smfg-catalog/db"
+	"github.com/sksmith/smfg-catalog/queue"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const (
-	ApplicationName = "go-micro-example"
+	ApplicationName = "smfg-catalog"
 	Revision        = "1"
 )
 
@@ -66,45 +62,28 @@ func main() {
 	bq := rabbit(config)
 	q := configInventoryQueue(bq, config)
 
-	log.Info().Msg("creating inventory service...")
-	ir := invrepo.NewPostgresRepo(dbPool)
-	inventoryService := inventory.NewService(ir, q, config.QInventoryExchange, config.QReservationExchange)
-
-	log.Info().Msg("creating user service...")
-	ur := usrrepo.NewPostgresRepo(dbPool)
-	userService := user.NewService(ur)
+	log.Info().Msg("creating catalog service...")
+	ir := db.NewPostgresRepo(dbPool)
+	catalogService := catalog.NewService(ir, q, config.QProductExchange)
 
 	log.Info().Msg("configuring metrics...")
 	api.ConfigureMetrics()
 
 	log.Info().Msg("configuring router...")
-	r := configureRouter(inventoryService, userService)
-
-	if config.GenerateRoutes {
-		log.Info().Msg("generating routes...")
-		createRouteDocs(r)
-	}
-
-	log.Info().Msg("consuming products...")
-	prodQueue := configProductQueue(bq, config)
-	go prodQueue.ConsumeProducts(context.Background(), inventoryService)
+	r := configureRouter(catalogService)
 
 	log.Info().Str("port", config.Port).Msg("listening")
 	log.Fatal().Err(http.ListenAndServe(":"+config.Port, r))
 }
 
-func configInventoryQueue(bq *bunnyq.BunnyQ, config *Config) (q inventory.Queue) {
+func configInventoryQueue(bq *bunnyq.BunnyQ, config *Config) (q catalog.Queue) {
 	if config.QMock {
 		log.Info().Msg("creating mock queue...")
 		return queue.NewMockQueue()
 	} else {
 		log.Info().Msg("connecting to rabbitmq...")
-		return queue.New(bq, config.QInventoryExchange, config.QReservationExchange)
+		return queue.New(bq, config.QProductExchange)
 	}
-}
-
-func configProductQueue(bq *bunnyq.BunnyQ, config *Config) (q *queue.ProductQueue) {
-	return queue.NewProductQueue(bq, config.QNewProduct, config.QNewProductDltExchange)
 }
 
 func loadConfigs() (config *Config) {
@@ -202,42 +181,40 @@ func printLogHeader(c *Config) {
 }
 
 func configDatabase(ctx context.Context, config *Config) (dbPool *pgxpool.Pool) {
-	if !config.InMemoryDb {
-		log.Info().Str("host", config.DbHost).Str("name", config.DbName).Msg("connecting to the database...")
-		var err error
+	log.Info().Str("host", config.DbHost).Str("name", config.DbName).Msg("connecting to the database...")
+	var err error
 
-		if config.DbMigrate {
-			log.Info().Msg("executing migrations")
+	if config.DbMigrate {
+		log.Info().Msg("executing migrations")
 
-			if err = db.RunMigrations(
-				config.DbHost,
-				config.DbName,
-				config.DbPort,
-				config.DbUser,
-				config.DbPass,
-				config.DbClean); err != nil {
-				log.Warn().Err(err).Msg("error executing migrations")
-			}
+		if err = db.RunMigrations(
+			config.DbHost,
+			config.DbName,
+			config.DbPort,
+			config.DbUser,
+			config.DbPass,
+			config.DbClean); err != nil {
+			log.Warn().Err(err).Msg("error executing migrations")
 		}
+	}
 
-		connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s",
-			config.DbHost, config.DbPort, config.DbUser, config.DbPass, config.DbName)
+	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s",
+		config.DbHost, config.DbPort, config.DbUser, config.DbPass, config.DbName)
 
-		for {
-			dbPool, err = db.ConnectDb(ctx, connStr, db.MinPoolConns(10), db.MaxPoolConns(50))
-			if err != nil {
-				log.Error().Err(err).Msg("failed to create connection pool... retrying")
-				time.Sleep(1 * time.Second)
-				continue
-			}
-			break
+	for {
+		dbPool, err = db.ConnectDb(ctx, connStr, db.MinPoolConns(10), db.MaxPoolConns(50))
+		if err != nil {
+			log.Error().Err(err).Msg("failed to create connection pool... retrying")
+			time.Sleep(1 * time.Second)
+			continue
 		}
+		break
 	}
 
 	return dbPool
 }
 
-func configureRouter(service inventory.Service, userService user.Service) chi.Router {
+func configureRouter(service catalog.Service) chi.Router {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -247,29 +224,16 @@ func configureRouter(service inventory.Service, userService user.Service) chi.Ro
 	r.Use(api.Logging)
 
 	r.Handle("/metrics", promhttp.Handler())
-	r.With(api.Authenticate(userService)).Route("/api", func(r chi.Router) {
-		r.Route("/inventory", inventoryApi(service))
-		r.Route("/user", userApi(userService))
+	r.Route("/api", func(r chi.Router) {
+		r.Route("/product", catalogApi(service))
 	})
 
 	return r
 }
 
-func userApi(s user.Service) func(r chi.Router) {
-	userApi := api.NewUserApi(s)
-	return userApi.ConfigureRouter
-}
-
-func inventoryApi(s inventory.Service) func(r chi.Router) {
-	invApi := api.NewInventoryApi(s)
-	return invApi.ConfigureRouter
-}
-
-func createRouteDocs(r chi.Router) {
-	fmt.Println(docgen.MarkdownRoutesDoc(r, docgen.MarkdownOpts{
-		ProjectPath: "github.com/sksmith/" + ApplicationName,
-		Intro:       "The generated API documentation for " + ApplicationName,
-	}))
+func catalogApi(s catalog.Service) func(r chi.Router) {
+	catApi := api.NewCatalogApi(s)
+	return catApi.ConfigureRouter
 }
 
 func configLogging(config *Config) {

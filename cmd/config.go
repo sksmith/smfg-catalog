@@ -9,29 +9,24 @@ import (
 )
 
 type Config struct {
-	Port                   string
-	GenerateRoutes         bool
-	LogLevel               string
-	LogText                bool
-	InMemoryDb             bool
-	DbHost                 string
-	DbPort                 string
-	DbUser                 string
-	DbPass                 string
-	DbName                 string
-	DbMigrate              bool
-	DbClean                bool
-	QMock                  bool
-	QHost                  string
-	QPort                  string
-	QUser                  string
-	QPass                  string
-	Revision               string
-	ApplicationName        string
-	QInventoryExchange     string
-	QReservationExchange   string
-	QNewProduct            string
-	QNewProductDltExchange string
+	Port             string
+	LogLevel         string
+	LogText          bool
+	DbHost           string
+	DbPort           string
+	DbUser           string
+	DbPass           string
+	DbName           string
+	DbMigrate        bool
+	DbClean          bool
+	QMock            bool
+	QHost            string
+	QPort            string
+	QUser            string
+	QPass            string
+	Revision         string
+	ApplicationName  string
+	QProductExchange string
 }
 
 const maxRetries = 5
@@ -40,8 +35,7 @@ func LoadLocalConfigs() (*Config, error) {
 	appConfig := &Config{ApplicationName: ApplicationName, Revision: Revision}
 
 	// API Configs
-	appConfig.Port = "8080"
-	appConfig.GenerateRoutes = false
+	appConfig.Port = "8081"
 
 	// Log Configs
 	appConfig.LogLevel = "trace"
@@ -52,10 +46,9 @@ func LoadLocalConfigs() (*Config, error) {
 	appConfig.DbPort = "5432"
 	appConfig.DbUser = "postgres"
 	appConfig.DbPass = "postgres"
-	appConfig.DbName = "micro-tmpl-db"
+	appConfig.DbName = "smfg-catalog-db"
 	appConfig.DbMigrate = true
 	appConfig.DbClean = false
-	appConfig.InMemoryDb = false
 
 	// Queue Configs
 	appConfig.QMock = false
@@ -63,10 +56,7 @@ func LoadLocalConfigs() (*Config, error) {
 	appConfig.QPort = "5672"
 	appConfig.QUser = "guest"
 	appConfig.QPass = "guest"
-	appConfig.QInventoryExchange = "inventory.exchange"
-	appConfig.QReservationExchange = "reservation.exchange"
-	appConfig.QNewProduct = "product.queue"
-	appConfig.QNewProductDltExchange = "product.exchange"
+	appConfig.QProductExchange = "product.exchange"
 
 	return appConfig, nil
 }
@@ -97,7 +87,6 @@ func LoadRemoteConfigs(url, branch, user, pass, profile string) (*Config, error)
 
 	// API Configs
 	appConfig.Port = getString(config, "app.port")
-	appConfig.GenerateRoutes = getBool(config, "app.generate.routes")
 
 	// Log Configs
 	appConfig.LogLevel = getString(config, "app.log.level")
@@ -111,7 +100,6 @@ func LoadRemoteConfigs(url, branch, user, pass, profile string) (*Config, error)
 	appConfig.DbName = getString(config, "db.name")
 	appConfig.DbMigrate = getBool(config, "db.migrate")
 	appConfig.DbClean = getBool(config, "db.clean")
-	appConfig.InMemoryDb = getBool(config, "db.in.memory")
 
 	// Queue Configs
 	appConfig.QMock = getBool(config, "queue.mock")
@@ -119,8 +107,7 @@ func LoadRemoteConfigs(url, branch, user, pass, profile string) (*Config, error)
 	appConfig.QPort = getString(config, "queue.port")
 	appConfig.QUser = getString(config, "queue.user")
 	appConfig.QPass = getString(config, "queue.pass")
-	appConfig.QInventoryExchange = getString(config, "queue.inventory.exchange")
-	appConfig.QReservationExchange = getString(config, "queue.reservation.exchange")
+	appConfig.QProductExchange = getString(config, "queue.product.exchange")
 
 	return appConfig, nil
 }

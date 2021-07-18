@@ -4,7 +4,7 @@ NOW := $(shell date -u +'%Y-%m-%d_%TZ')
 
 build:
 	@echo Building the binary
-	go build -ldflags "-X main.AppVersion=$(VER) -X main.Sha1Version=$(SHA1) -X main.BuildTime=$(NOW)" -o ./bin/inventory ./cmd
+	go build -ldflags "-X main.AppVersion=$(VER) -X main.Sha1Version=$(SHA1) -X main.BuildTime=$(NOW)" -o ./bin/smfg-catalog ./cmd
 
 test:
 	go test -v ./...

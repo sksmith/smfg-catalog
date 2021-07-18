@@ -2,15 +2,15 @@ package api
 
 import (
 	"context"
-	"github.com/go-chi/chi"
-	"github.com/go-chi/chi/middleware"
-	"github.com/prometheus/client_golang/prometheus"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/rs/zerolog/log"
-	"github.com/sksmith/go-micro-example/core/user"
 )
 
 const DefaultPageLimit = 50
@@ -18,14 +18,14 @@ const DefaultPageLimit = 50
 type CtxKey string
 
 const (
-	CtxKeyLimit CtxKey = "limit"
+	CtxKeyLimit  CtxKey = "limit"
 	CtxKeyOffset CtxKey = "offset"
-	CtxKeyUser CtxKey = "user"
+	CtxKeyUser   CtxKey = "user"
 )
 
 var (
 	urlHitCount *prometheus.CounterVec
-	urlLatency *prometheus.SummaryVec
+	urlLatency  *prometheus.SummaryVec
 )
 
 func Paginate(next http.Handler) http.Handler {
@@ -56,50 +56,6 @@ func Paginate(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-type UserAccess interface {
-	Login(ctx context.Context, username, password string) (user.User, error)
-}
-
-func Authenticate(ua UserAccess) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			username, password, ok := r.BasicAuth()
-
-			if !ok {
-				authErr(w)
-				return
-			}
-
-			u, err := ua.Login(r.Context(), username, password)
-			if err != nil {
-				authErr(w)
-				return
-			}
-
-			ctx := context.WithValue(r.Context(), CtxKeyUser, u)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
-}
-
-func AdminOnly(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		usr, ok := r.Context().Value(CtxKeyUser).(user.User)
-
-		if !ok || !usr.IsAdmin {
-			authErr(w)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
-func authErr(w http.ResponseWriter) {
-	w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
-	http.Error(w, "Unauthorized", http.StatusUnauthorized)
 }
 
 func Logging(next http.Handler) http.Handler {
